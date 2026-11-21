@@ -1,0 +1,28 @@
+[package]
+name = "calculator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+iced = "0.14"
+
+[build-dependencies]
+winresource = "0.1.34"
+
+[lib]
+name = "calculator_app"
+crate-type = ["rlib", "cdylib"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+iced_winit = "0.14"
+winit = { version = "0.30", features = ["android-native-activity"] }
+android_logger = "0.15"
+log = "0.4"
+
+# iced_winit with a small patch so it can start on Android (see vendor/iced_winit/src/lib.rs).
+[patch.crates-io]
+iced_winit = { path = "vendor/iced_winit" }
+
+[profile.release]
+strip = true
+lto = "thin"
