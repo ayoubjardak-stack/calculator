@@ -15,7 +15,7 @@ const SCIENTIFIC_SIZE: Size = Size::new(860.0, 580.0);
 /// Starts the app.
 pub fn run() -> iced::Result {
     #[cfg_attr(not(target_os = "android"), allow(unused_mut))]
-    let mut app = iced::application(App::default, App::update, App::view)
+    let mut app = iced::application(App::load, App::update, App::view)
         .title("Calculator")
         .theme(|app: &App| app.current_theme())
         .subscription(App::subscription)
@@ -51,6 +51,29 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
     let _ = iced_winit::ANDROID_APP.set(app);
     if let Err(e) = run() {
         log::error!("calculator failed: {e}");
+    }
+}
+
+mod settings {
+    use std::path::PathBuf;
+
+    /// Where the settings file lives:
+    /// - Android: the app's private storage (kept until the app is uninstalled)
+    /// - Windows: %APPDATA%\calculator\settings.txt
+    /// - other: ~/.config/calculator/settings.txt
+    pub fn path() -> Option<PathBuf> {
+        #[cfg(target_os = "android")]
+        {
+            let app = iced_winit::ANDROID_APP.get()?;
+            Some(app.internal_data_path()?.join("settings.txt"))
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let base = std::env::var_os("APPDATA")
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+            Some(base.join("calculator").join("settings.txt"))
+        }
     }
 }
 
@@ -204,6 +227,65 @@ impl Default for App {
 }
 
 impl App {
+    /// Starts the app with the settings saved last time.
+    fn load() -> (Self, Task<Message>) {
+        let mut app = Self::default();
+        if let Some(text) = settings::path().and_then(|p| std::fs::read_to_string(p).ok()) {
+            app.apply_settings(&text);
+        }
+        // Open the window at the right width if scientific mode was on.
+        let task = if app.scientific && !cfg!(target_os = "android") {
+            window::latest().and_then(|id| window::resize(id, SCIENTIFIC_SIZE))
+        } else {
+            Task::none()
+        };
+        (app, task)
+    }
+
+    /// The settings as text, one `key=value` per line.
+    fn settings_text(&self) -> String {
+        format!(
+            "theme={}\nsize={}\nrounded={}\nscientific={}\n",
+            self.themes[self.selected].name,
+            self.size.name(),
+            self.rounded,
+            self.scientific,
+        )
+    }
+
+    /// Reads settings saved by `settings_text`. Unknown or broken lines are ignored.
+    fn apply_settings(&mut self, text: &str) {
+        for line in text.lines() {
+            let Some((key, value)) = line.split_once('=') else { continue };
+            let value = value.trim();
+            match key.trim() {
+                "theme" => {
+                    if let Some(i) = self.themes.iter().position(|t| t.name == value) {
+                        self.selected = i;
+                    }
+                }
+                "size" => {
+                    if let Some(size) = UiSize::ALL.into_iter().find(|s| s.name() == value) {
+                        self.size = size;
+                    }
+                }
+                "rounded" => self.rounded = value != "false",
+                "scientific" => self.scientific = value == "true",
+                _ => {}
+            }
+        }
+    }
+
+    /// Saves the settings right away (Android may close the app at any moment).
+    fn save_settings(&self) {
+        if let Some(path) = settings::path() {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(path, self.settings_text());
+        }
+    }
+
     /// `None` lets iced pick Light or Dark based on the OS setting.
     fn current_theme(&self) -> Option<Theme> {
         self.themes[self.selected].theme.clone()
@@ -223,6 +305,21 @@ impl App {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        let changes_settings = matches!(
+            message,
+            Message::ThemeSelected(_)
+                | Message::ToggleRounded(_)
+                | Message::SizeSelected(_)
+                | Message::ToggleScientific(_)
+        );
+        let task = self.apply(message);
+        if changes_settings {
+            self.save_settings();
+        }
+        task
+    }
+
+    fn apply(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Input(input) => self.engine.press(input),
             Message::OpenSettings => self.screen = Screen::Settings,
@@ -1590,10 +1687,32 @@ mod tests {
     }
 
     #[test]
+    fn settings_round_trip() {
+        let mut app = App::default();
+        let _ = app.apply(Message::ThemeSelected(3)); // Hacker
+        let _ = app.apply(Message::SizeSelected(UiSize::Large));
+        let _ = app.apply(Message::ToggleRounded(false));
+        let text = app.settings_text();
+
+        let mut loaded = App::default();
+        loaded.apply_settings(&text);
+        assert_eq!(loaded.themes[loaded.selected].name, "Hacker");
+        assert_eq!(loaded.size, UiSize::Large);
+        assert!(!loaded.rounded);
+        assert!(!loaded.scientific);
+
+        // Old or damaged files don't break anything.
+        let mut app = App::default();
+        app.apply_settings("theme=Nope\ngarbage\nsize=Huge\n");
+        assert_eq!(app.selected, 0);
+        assert_eq!(app.size, UiSize::Normal);
+    }
+
+    #[test]
     fn size_setting() {
         let mut app = App::default();
         assert_eq!(app.size, UiSize::Normal);
-        let _ = app.update(Message::SizeSelected(UiSize::Large));
+        let _ = app.apply(Message::SizeSelected(UiSize::Large));
         assert_eq!(app.size, UiSize::Large);
         assert!(UiSize::Compact.scale() < UiSize::Normal.scale());
         assert!(UiSize::Large.scale() > UiSize::Normal.scale());

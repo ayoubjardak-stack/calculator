@@ -20,6 +20,15 @@ TARGET_SDK = 34
 PACKAGE = "com.example.calculator"
 LIB_NAME = "calculator_app"
 
+
+def app_version():
+    """Version from Cargo.toml, e.g. 1.1.0 -> name "1.1.0", code 10100."""
+    import re
+    text = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+    name = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M).group(1)
+    major, minor, patch = (int(x) for x in name.split(".")[:3])
+    return name, major * 10000 + minor * 100 + patch
+
 # Rust target -> (Android ABI folder, NDK clang prefix)
 TARGETS = {
     "aarch64-linux-android": ("arm64-v8a", "aarch64-linux-android"),  # 64-bit phones
@@ -115,10 +124,11 @@ def main():
     (values / "strings.xml").write_text(
         '<resources><string name="app_name">Calculator</string></resources>', encoding="utf-8")
 
+    version_name, version_code = app_version()
     manifest = OUT / "AndroidManifest.xml"
     manifest.write_text(f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="{PACKAGE}" android:versionCode="1" android:versionName="1.0">
+    package="{PACKAGE}" android:versionCode="{version_code}" android:versionName="{version_name}">
     <uses-sdk android:minSdkVersion="{MIN_SDK}" android:targetSdkVersion="{TARGET_SDK}" />
     <!-- No GPU requirement: iced falls back to software drawing (tiny-skia)
          when the phone has no usable Vulkan / OpenGL ES 3. -->
