@@ -1,4 +1,5 @@
-; Windows installer for the calculator (NSIS 3).
+﻿; Windows installer for the calculator (NSIS 3).
+; (This file is saved as UTF-8 with BOM so NSIS reads the French accents correctly.)
 ;
 ; Build it with:  python tools/build_installer.py
 ; (that script builds the release .exe first and passes VERSION / EXE / OUTFILE)
@@ -48,9 +49,11 @@ VIAddVersionKey "LegalCopyright" "${PUBLISHER}"
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_NODESC
 
-!define MUI_WELCOMEPAGE_TEXT "This will install ${APP_NAME} ${VERSION} on your computer.$\r$\n$\r$\nNo administrator rights are needed: it is installed for your Windows account only.$\r$\n$\r$\nClick Next to continue."
+; Our own texts come from the LangStrings below, so they follow the
+; installer language (English or French, picked from Windows' language).
+!define MUI_WELCOMEPAGE_TEXT "$(WELCOME_TEXT)"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT "Open ${APP_NAME} now"
+!define MUI_FINISHPAGE_RUN_TEXT "$(RUN_TEXT)"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
@@ -64,8 +67,17 @@ VIAddVersionKey "LegalCopyright" "${PUBLISHER}"
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "French"
 
+LangString WELCOME_TEXT ${LANG_ENGLISH} "This will install ${APP_NAME} ${VERSION} on your computer.$\r$\n$\r$\nNo administrator rights are needed: it is installed for your Windows account only.$\r$\n$\r$\nClick Next to continue."
+LangString WELCOME_TEXT ${LANG_FRENCH} "Ce programme va installer ${APP_NAME} ${VERSION} sur votre ordinateur.$\r$\n$\r$\nAucun droit administrateur n'est nécessaire : l'application est installée uniquement pour votre compte Windows.$\r$\n$\r$\nCliquez sur Suivant pour continuer."
+LangString RUN_TEXT ${LANG_ENGLISH} "Open ${APP_NAME} now"
+LangString RUN_TEXT ${LANG_FRENCH} "Ouvrir ${APP_NAME} maintenant"
+LangString SEC_APP ${LANG_ENGLISH} "${APP_NAME} (required)"
+LangString SEC_APP ${LANG_FRENCH} "${APP_NAME} (obligatoire)"
+LangString SEC_DESKTOP ${LANG_ENGLISH} "Desktop shortcut"
+LangString SEC_DESKTOP ${LANG_FRENCH} "Raccourci sur le Bureau"
+
 ; ── Install ──────────────────────────────────────────────────────────────
-Section "${APP_NAME} (required)" SecApp
+Section "$(SEC_APP)" SecApp
   SectionIn RO
 
   ; Close a running copy so its .exe can be replaced.
@@ -90,7 +102,7 @@ Section "${APP_NAME} (required)" SecApp
   WriteRegDWORD HKCU "${UNINST_KEY}" "EstimatedSize" 12000
 SectionEnd
 
-Section "Desktop shortcut" SecDesktop
+Section "$(SEC_DESKTOP)" SecDesktop
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
 SectionEnd
 
