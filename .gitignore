@@ -1,3 +1,5 @@
 /target
 calculator.apk
 Gemini_Generated_Image_*.jpg
+# Linux build output (too big for git; shared via GitHub releases)
+/calculator
